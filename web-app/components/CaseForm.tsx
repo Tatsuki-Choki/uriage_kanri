@@ -2,17 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { CaseData, fetchClients, fetchStatuses, fetchMonths, registerCase } from '@/lib/api';
+import MonthlySheetForm from './MonthlySheetForm';
+import EndOfMonthSheetForm from './EndOfMonthSheetForm';
 
 interface CaseFormProps {
   onSuccess: () => void;
 }
 
+type SheetType = '月別シート' | '月末請求シート';
+
 export default function CaseForm({ onSuccess }: CaseFormProps) {
+  const [activeTab, setActiveTab] = useState<SheetType>('月別シート');
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [months, setMonths] = useState<string[]>([]);
-  const [formData, setFormData] = useState<CaseData>({
+  const [monthlyFormData, setMonthlyFormData] = useState<CaseData>({
     sheetType: '月別シート',
     month: '',
     registrationDate: new Date().toISOString().split('T')[0],
@@ -20,6 +25,16 @@ export default function CaseForm({ onSuccess }: CaseFormProps) {
     industry: '',
     expense: undefined,
     expenseUsd: undefined,
+    revenue: 0,
+    status: '',
+    notes: '',
+  });
+  const [endOfMonthFormData, setEndOfMonthFormData] = useState<CaseData>({
+    sheetType: '月末請求シート',
+    month: '',
+    registrationDate: new Date().toISOString().split('T')[0],
+    clientName: '',
+    expense: undefined,
     revenue: 0,
     orderDate: undefined,
     status: '',
@@ -45,8 +60,13 @@ export default function CaseForm({ onSuccess }: CaseFormProps) {
       setMonths(monthsData);
       
       // デフォルトの月を設定（最初の月）
-      if (monthsData.length > 0 && !formData.month) {
-        setFormData(prev => ({ ...prev, month: monthsData[0] }));
+      if (monthsData.length > 0) {
+        if (!monthlyFormData.month) {
+          setMonthlyFormData(prev => ({ ...prev, month: monthsData[0] }));
+        }
+        if (!endOfMonthFormData.month) {
+          setEndOfMonthFormData(prev => ({ ...prev, month: monthsData[0] }));
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'マスターデータの読み込みに失敗しました';
@@ -63,17 +83,29 @@ export default function CaseForm({ onSuccess }: CaseFormProps) {
     setLoading(true);
 
     try {
+      const formData = activeTab === '月別シート' ? monthlyFormData : endOfMonthFormData;
       await registerCase(formData);
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '案件登録に失敗しました');
+      const errorMessage = err instanceof Error ? err.message : '案件登録に失敗しました';
+      setError(errorMessage);
+      console.error('案件登録エラー:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (field: keyof CaseData, value: string | number | undefined) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const handleMonthlyChange = (field: keyof CaseData, value: string | number | undefined) => {
+    setMonthlyFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleEndOfMonthChange = (field: keyof CaseData, value: string | number | undefined) => {
+    setEndOfMonthFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleTabChange = (tab: SheetType) => {
+    setActiveTab(tab);
+    setError(null);
   };
 
   return (
@@ -86,211 +118,59 @@ export default function CaseForm({ onSuccess }: CaseFormProps) {
         </div>
       )}
 
+      {/* タブ */}
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            type="button"
+            onClick={() => handleTabChange('月別シート')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm
+              ${activeTab === '月別シート'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }
+            `}
+          >
+            月別シート
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('月末請求シート')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm
+              ${activeTab === '月末請求シート'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }
+            `}
+          >
+            月末請求シート
+          </button>
+        </nav>
+      </div>
+
+      {/* フォーム */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* シートタイプ選択 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            登録先シート <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={formData.sheetType}
-            onChange={(e) => handleChange('sheetType', e.target.value as '月別シート' | '月末請求シート')}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-          >
-            <option value="月別シート">月別シート</option>
-            <option value="月末請求シート">月末請求シート</option>
-          </select>
-        </div>
-
-        {/* 月選択 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            月 <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={formData.month}
-            onChange={(e) => handleChange('month', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-            disabled={loading}
-          >
-            <option value="">選択してください</option>
-            {months.map((month) => (
-              <option key={month} value={month}>
-                {month}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* 登録日 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            登録日 <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="date"
-            value={formData.registrationDate}
-            onChange={(e) => handleChange('registrationDate', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
+        {activeTab === '月別シート' ? (
+          <MonthlySheetForm
+            formData={monthlyFormData}
+            clients={clients}
+            statuses={statuses}
+            months={months}
+            loading={loading}
+            onChange={handleMonthlyChange}
           />
-          <p className="mt-1 text-sm text-gray-500">未入力の場合は当日が設定されます</p>
-        </div>
-
-        {/* クライアント名 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            クライアント名 <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={formData.clientName}
-            onChange={(e) => handleChange('clientName', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-            disabled={loading}
-          >
-            <option value="">選択してください</option>
-            {clients.map((client) => (
-              <option key={client} value={client}>
-                {client}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* 業種 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            業種
-          </label>
-          <input
-            type="text"
-            value={formData.industry || ''}
-            onChange={(e) => handleChange('industry', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="業種を入力してください"
+        ) : (
+          <EndOfMonthSheetForm
+            formData={endOfMonthFormData}
+            clients={clients}
+            statuses={statuses}
+            months={months}
+            loading={loading}
+            onChange={handleEndOfMonthChange}
           />
-        </div>
-
-        {/* 経費（月別シートの場合のみ表示） */}
-        {formData.sheetType === '月別シート' && (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                経費（円）
-              </label>
-              <input
-                type="number"
-                value={formData.expense || ''}
-                onChange={(e) => handleChange('expense', e.target.value ? parseFloat(e.target.value) : undefined)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="0"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                経費（ドル）
-              </label>
-              <input
-                type="number"
-                value={formData.expenseUsd || ''}
-                onChange={(e) => handleChange('expenseUsd', e.target.value ? parseFloat(e.target.value) : undefined)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="0"
-                min="0"
-                step="0.01"
-              />
-            </div>
-          </>
         )}
-
-        {/* 受注日（月末請求シートの場合のみ表示） */}
-        {formData.sheetType === '月末請求シート' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              受注日
-            </label>
-            <input
-              type="date"
-              value={formData.orderDate || formData.registrationDate}
-              onChange={(e) => handleChange('orderDate', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-        )}
-
-        {/* 経費（月末請求シートの場合） */}
-        {formData.sheetType === '月末請求シート' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              経費（円）
-            </label>
-            <input
-              type="number"
-              value={formData.expense || ''}
-              onChange={(e) => handleChange('expense', e.target.value ? parseFloat(e.target.value) : undefined)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="0"
-              min="0"
-            />
-          </div>
-        )}
-
-        {/* 売上 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            売上 <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="number"
-            value={formData.revenue || ''}
-            onChange={(e) => handleChange('revenue', parseFloat(e.target.value) || 0)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="0"
-            required
-            min="0"
-          />
-        </div>
-
-        {/* ステータス */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            ステータス <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={formData.status}
-            onChange={(e) => handleChange('status', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-            disabled={loading}
-          >
-            <option value="">選択してください</option>
-            {statuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* 備考 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            備考 <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            value={formData.notes}
-            onChange={(e) => handleChange('notes', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={4}
-            placeholder="備考を入力してください"
-            required
-          />
-        </div>
 
         {/* 送信ボタン */}
         <div className="flex justify-end space-x-4">
@@ -306,4 +186,3 @@ export default function CaseForm({ onSuccess }: CaseFormProps) {
     </div>
   );
 }
-
