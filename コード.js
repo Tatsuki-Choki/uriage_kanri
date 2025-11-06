@@ -777,11 +777,11 @@ function formatMonthlySheet(sheet) {
   evenRowRange.setBackground('#f7f9fa');
   oddRowRange.setBackground('#ffffff');
   
-  // 数値列のフォーマット（バッチ処理で最適化）- 利益列は数式のため除外
+  // 数値列のフォーマット（バッチ処理で最適化）
   const numberFormatRange = sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 4);
   const numberFormats = [];
   for (let i = 0; i < CONSTANTS.DATA_ROWS; i++) {
-    numberFormats.push(['¥#,##0', '$#,##0.00', '¥#,##0', '']); // 経費、経費（ドル）、売上、利益（空）
+    numberFormats.push(['¥#,##0', '$#,##0.00', '¥#,##0', '¥#,##0']); // 経費、経費（ドル）、売上、利益
   }
   numberFormatRange.setNumberFormats(numberFormats);
   
