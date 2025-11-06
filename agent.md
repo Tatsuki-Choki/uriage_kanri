@@ -49,3 +49,20 @@ clasp deploy -i AKfycbzX5QtLy5Q4K2ZCc2SgFBtRqGhaU-JMXmwN6fbo2vMXNffhZAf8q_HhGprO
 
 **注意**: `clasp push`だけではWebアプリの設定は更新されません。デプロイの設定（Webアプリとして公開するなど）はGoogle Apps Scriptエディタで手動で設定する必要があります。
 
+## コード更新後のGitHubプッシュ
+
+コードの更新が終了したら、**必ずGitHubにプッシュ**してください：
+
+```bash
+# 1. 変更をステージング
+git add .
+
+# 2. コミット
+git commit -m "Update: 変更内容の説明"
+
+# 3. GitHubにプッシュ
+git push origin main
+```
+
+**重要**: コードの更新作業が完了したら、この手順を忘れずに実行してください。
+
