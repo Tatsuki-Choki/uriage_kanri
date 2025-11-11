@@ -370,33 +370,30 @@ function createMonthlySheet(sheetName, yearlySheetName = null) {
   ];
   sheet.getRange(7, 12, 3, 1).setFormulas(monthlyTotalFormulas);
   
-  // 受注日列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+  // 受注日列のデータ検証（カレンダーから選択可能）
   const dateRule = SpreadsheetApp.newDataValidation()
     .requireDate()
     .setAllowInvalid(false)
-    .setShowCustomUi(true)
     .build();
   sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
 
-  // 納期列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+  // 納期列のデータ検証（カレンダーから選択可能）
   sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
 
-  // ステータスのデータ検証を設定（最新のチップスタイル）
+  // ステータスのデータ検証を設定
   const statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(CONSTANTS.STATUS_OPTIONS)
     .setAllowInvalid(false)
-    .setShowCustomUi(true)
     .build();
   sheet.getRange(2, 10, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
 
-  // クライアント列のデータ検証を設定（クライアントシートから参照、最新のチップスタイル）
+  // クライアント列のデータ検証を設定（クライアントシートから参照）
   const clientSheet = ss.getSheetByName('クライアント');
   if (clientSheet) {
     const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
     const clientValidation = SpreadsheetApp.newDataValidation()
       .requireValueInRange(clientRange)
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
     sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
   }
@@ -638,11 +635,10 @@ function addDeliveryColumnToEndOfMonthSheet(sheetName) {
     }
     sheet.getRange(2, 7, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
 
-    // ステップ5: データ検証を新しい列番号で設定（最新のチップスタイル）
+    // ステップ5: データ検証を新しい列番号で設定
     const dateRule = SpreadsheetApp.newDataValidation()
       .requireDate()
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
 
     // 受注日列（B列）
@@ -659,7 +655,6 @@ function addDeliveryColumnToEndOfMonthSheet(sheetName) {
         const clientValidation = SpreadsheetApp.newDataValidation()
           .requireValueInRange(clientRange)
           .setAllowInvalid(false)
-          .setShowCustomUi(true)
           .build();
         sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
       } catch (error) {
@@ -671,7 +666,6 @@ function addDeliveryColumnToEndOfMonthSheet(sheetName) {
     const statusRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(CONSTANTS.STATUS_OPTIONS)
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
     sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
 
@@ -755,11 +749,10 @@ function addOrderAndDeliveryColumnsToMonthlySheet(sheetName) {
     }
     sheet.getRange(2, 9, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
 
-    // ステップ5: データ検証を新しい列番号で設定（最新のチップスタイル）
+    // ステップ5: データ検証を新しい列番号で設定
     const dateRule = SpreadsheetApp.newDataValidation()
       .requireDate()
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
 
     // 受注日列（B列）
@@ -776,7 +769,6 @@ function addOrderAndDeliveryColumnsToMonthlySheet(sheetName) {
         const clientValidation = SpreadsheetApp.newDataValidation()
           .requireValueInRange(clientRange)
           .setAllowInvalid(false)
-          .setShowCustomUi(true)
           .build();
         sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
       } catch (error) {
@@ -788,7 +780,6 @@ function addOrderAndDeliveryColumnsToMonthlySheet(sheetName) {
     const statusRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(CONSTANTS.STATUS_OPTIONS)
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
     sheet.getRange(2, 10, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
 
@@ -972,26 +963,24 @@ function createEndOfMonthSheet(sheetName) {
     sheet.getRange(clientListRow, 11, 20, 1).setFormulas(clientSumFormulas);
     
     // ステップ8: データ検証を設定
-    // 受注日列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+    // 受注日列のデータ検証（カレンダーから選択可能）
     const dateRule = SpreadsheetApp.newDataValidation()
       .requireDate()
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
     sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
 
-    // 納期列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+    // 納期列のデータ検証（カレンダーから選択可能）
     sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
 
-    // ステータス列のデータ検証（最新のチップスタイル）
+    // ステータス列のデータ検証
     const statusRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(CONSTANTS.STATUS_OPTIONS)
       .setAllowInvalid(false)
-      .setShowCustomUi(true)
       .build();
     sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
 
-    // クライアント列のデータ検証（最新のチップスタイル）
+    // クライアント列のデータ検証
     const clientSheet = ss.getSheetByName('クライアント');
     if (clientSheet) {
       try {
@@ -999,7 +988,6 @@ function createEndOfMonthSheet(sheetName) {
         const clientValidation = SpreadsheetApp.newDataValidation()
           .requireValueInRange(clientRange)
           .setAllowInvalid(false)
-          .setShowCustomUi(true)
           .build();
         sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
       } catch (error) {
