@@ -374,16 +374,23 @@ function createMonthlySheet(sheetName, yearlySheetName = null) {
   const dateRule = SpreadsheetApp.newDataValidation()
     .requireDate()
     .setAllowInvalid(false)
+    .setHelpText('カレンダーから日付を選択してください')
     .build();
   sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
 
   // 納期列のデータ検証（カレンダーから選択可能）
-  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+  const deliveryDateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(false)
+    .setHelpText('納期をカレンダーから選択してください')
+    .build();
+  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(deliveryDateRule);
 
   // ステータスのデータ検証を設定
   const statusRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(CONSTANTS.STATUS_OPTIONS)
+    .requireValueInList(CONSTANTS.STATUS_OPTIONS, true)
     .setAllowInvalid(false)
+    .setHelpText('ステータスを選択してください')
     .build();
   sheet.getRange(2, 10, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
 
@@ -392,17 +399,15 @@ function createMonthlySheet(sheetName, yearlySheetName = null) {
   if (clientSheet) {
     const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
     const clientValidation = SpreadsheetApp.newDataValidation()
-      .requireValueInRange(clientRange)
+      .requireValueInRange(clientRange, true)
       .setAllowInvalid(false)
+      .setHelpText('クライアント名を選択してください')
       .build();
     sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
   }
 
   // 条件付き書式を設定（一度に設定してパフォーマンス最適化）
-  setConditionalFormatting(sheet, 10, 4); // ステータス列（10列目）、クライアント列（4列目）
-
-  // 納期列の条件付き書式を設定（当日: 赤、1日前: 黄色）
-  setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
+  setConditionalFormatting(sheet, 10, 4, 3); // ステータス列（10列目）、クライアント列（4列目）、納期列（3列目）
   
   // フォーマットを適用
   formatMonthlySheet(sheet);
@@ -465,16 +470,49 @@ function setClientConditionalFormattingByClient(sheet, clientColumn) {
 }
 
 /**
- * ステータス列とクライアント列の条件付き書式を一度に設定（パフォーマンス最適化）
+ * ステータス列、クライアント列、納期列の条件付き書式を一度に設定（パフォーマンス最適化）
  * @param {Sheet} sheet シートオブジェクト
  * @param {number} statusColumn ステータス列の番号
  * @param {number} clientColumn クライアント列の番号
+ * @param {number} deliveryColumn 納期列の番号（オプション）
  */
-function setConditionalFormatting(sheet, statusColumn, clientColumn) {
+function setConditionalFormatting(sheet, statusColumn, clientColumn, deliveryColumn) {
   const rules = [];
   const statusColumnLetter = String.fromCharCode(64 + statusColumn);
   const clientColumnLetter = String.fromCharCode(64 + clientColumn);
-  
+
+  // 納期列の条件付き書式ルールを作成（最優先）
+  if (deliveryColumn) {
+    const deliveryColumnLetter = String.fromCharCode(64 + deliveryColumn);
+
+    // 優先度1: ステータスが「納品済み」「入金前」「入金済み」の場合はグレーアウト
+    const greyoutStatuses = ['納品済み', '入金前', '入金済み'];
+    greyoutStatuses.forEach(status => {
+      const rule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied(`=${statusColumnLetter}2="${status}"`)
+        .setBackground('#E0E0E0')
+        .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
+        .build();
+      rules.push(rule);
+    });
+
+    // 優先度2: 納期が当日の場合は赤色
+    const todayRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=AND(NOT(ISBLANK(${deliveryColumnLetter}2)),${deliveryColumnLetter}2=TODAY())`)
+      .setBackground('#FFCDD2')
+      .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
+      .build();
+    rules.push(todayRule);
+
+    // 優先度3: 納期が明日の場合は黄色
+    const tomorrowRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=AND(NOT(ISBLANK(${deliveryColumnLetter}2)),${deliveryColumnLetter}2=TODAY()+1)`)
+      .setBackground('#FFF9C4')
+      .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
+      .build();
+    rules.push(tomorrowRule);
+  }
+
   // ステータス列の条件付き書式ルールを作成
   CONSTANTS.STATUS_OPTIONS.forEach(status => {
     const color = CONSTANTS.STATUS_COLORS[status];
@@ -487,15 +525,15 @@ function setConditionalFormatting(sheet, statusColumn, clientColumn) {
       rules.push(rule);
     }
   });
-  
+
   // クライアント列の条件付き書式ルールを作成（クライアントごとに異なる色）
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const clientSheet = ss.getSheetByName('クライアント');
-  
+
   if (clientSheet) {
     const clientData = clientSheet.getRange(2, 1, CONSTANTS.MAX_CLIENT_ROWS, 1).getValues();
     const clients = clientData.filter(row => row[0] && row[0].toString().trim() !== '');
-    
+
     // クライアントごとに異なる色を割り当てる（色のパレット）
     const clientColors = [
       '#E3F2FD', '#F3E5F5', '#E8F5E9', '#FFF3E0', '#FCE4EC',
@@ -503,12 +541,12 @@ function setConditionalFormatting(sheet, statusColumn, clientColumn) {
       '#E8EAF6', '#F9FBE7', '#FFFDE7', '#FBE9E7', '#E8F0FE',
       '#F5F5F5', '#FFF9C4', '#FFE0B2', '#C8E6C9', '#BBDEFB'
     ];
-    
+
     // 各クライアントごとに条件付き書式ルールを作成
     clients.forEach((clientRow, index) => {
       const clientName = clientRow[0].toString().trim();
       const color = clientColors[index % clientColors.length];
-      
+
       const rule = SpreadsheetApp.newConditionalFormatRule()
         .whenFormulaSatisfied(`=${clientColumnLetter}2="${clientName}"`)
         .setBackground(color)
@@ -517,7 +555,7 @@ function setConditionalFormatting(sheet, statusColumn, clientColumn) {
       rules.push(rule);
     });
   }
-  
+
   // すべてのルールを一度に設定（パフォーマンス最適化）
   if (rules.length > 0) {
     sheet.setConditionalFormatRules(rules);
@@ -566,39 +604,6 @@ function setClientConditionalFormatting(sheet, clientColumn) {
   
   sheet.setConditionalFormatRules([rule]);
 }
-
-/**
- * 納期列に条件付き書式を設定（当日: 赤、1日前: 黄色）
- * @param {Sheet} sheet シートオブジェクト
- * @param {number} deliveryColumn 納期列の番号
- */
-function setDeliveryDateConditionalFormatting(sheet, deliveryColumn) {
-  const rules = [];
-  const columnLetter = String.fromCharCode(64 + deliveryColumn); // A=65, B=66, ...
-
-  // 納期が当日の場合: 赤色背景
-  const todayRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=${columnLetter}2=TODAY()`)
-    .setBackground('#FF0000')
-    .setFontColor('#FFFFFF')
-    .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
-    .build();
-  rules.push(todayRule);
-
-  // 納期が1日前の場合: 黄色背景
-  const tomorrowRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=${columnLetter}2=TODAY()+1`)
-    .setBackground('#FFFF00')
-    .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
-    .build();
-  rules.push(tomorrowRule);
-
-  // 既存のルールを取得して追加
-  const existingRules = sheet.getConditionalFormatRules();
-  sheet.setConditionalFormatRules(existingRules.concat(rules));
-}
-
-
 
 /**
  * シート名から月名を抽出（末尾の「（月末請求分）」を削除）
@@ -705,16 +710,23 @@ function createEndOfMonthSheet(sheetName) {
     const dateRule = SpreadsheetApp.newDataValidation()
       .requireDate()
       .setAllowInvalid(false)
+      .setHelpText('カレンダーから日付を選択してください')
       .build();
     sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
 
     // 納期列のデータ検証（カレンダーから選択可能）
-    sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+    const deliveryDateRule = SpreadsheetApp.newDataValidation()
+      .requireDate()
+      .setAllowInvalid(false)
+      .setHelpText('納期をカレンダーから選択してください')
+      .build();
+    sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(deliveryDateRule);
 
     // ステータス列のデータ検証
     const statusRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(CONSTANTS.STATUS_OPTIONS)
+      .requireValueInList(CONSTANTS.STATUS_OPTIONS, true)
       .setAllowInvalid(false)
+      .setHelpText('ステータスを選択してください')
       .build();
     sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
 
@@ -724,8 +736,9 @@ function createEndOfMonthSheet(sheetName) {
       try {
         const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
         const clientValidation = SpreadsheetApp.newDataValidation()
-          .requireValueInRange(clientRange)
+          .requireValueInRange(clientRange, true)
           .setAllowInvalid(false)
+          .setHelpText('クライアント名を選択してください')
           .build();
         sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
       } catch (error) {
@@ -734,10 +747,7 @@ function createEndOfMonthSheet(sheetName) {
     }
 
     // 条件付き書式を設定（一度に設定してパフォーマンス最適化）
-    setConditionalFormatting(sheet, 8, 4); // ステータス列（8列目）、クライアント列（4列目）
-
-    // 納期列の条件付き書式を設定（当日: 赤、1日前: 黄色）
-    setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
+    setConditionalFormatting(sheet, 8, 4, 3); // ステータス列（8列目）、クライアント列（4列目）、納期列（3列目）
     
     // ステップ9: フォーマットを適用（最後に実行）
     formatEndOfMonthSheet(sheet);
@@ -1178,11 +1188,17 @@ function updateExistingMonthlySheet(sheetName) {
   const dateRule = SpreadsheetApp.newDataValidation()
     .requireDate()
     .setAllowInvalid(false)
+    .setHelpText('カレンダーから日付を選択してください')
     .build();
   sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule); // B列
 
   // 納期列のデータ検証（カレンダーから選択可能）
-  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule); // C列
+  const deliveryDateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(false)
+    .setHelpText('納期をカレンダーから選択してください')
+    .build();
+  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(deliveryDateRule); // C列
 
   // クライアント列のデータ検証を設定（クライアントシートから参照）
   const clientSheet = ss.getSheetByName('クライアント');
@@ -1190,8 +1206,9 @@ function updateExistingMonthlySheet(sheetName) {
     try {
       const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
       const clientValidation = SpreadsheetApp.newDataValidation()
-        .requireValueInRange(clientRange)
+        .requireValueInRange(clientRange, true)
         .setAllowInvalid(false)
+        .setHelpText('クライアント名を選択してください')
         .build();
       sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation); // D列（4列目）
     } catch (error) {
@@ -1201,8 +1218,9 @@ function updateExistingMonthlySheet(sheetName) {
 
   // ステータス列のデータ検証を設定
   const statusRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(CONSTANTS.STATUS_OPTIONS)
+    .requireValueInList(CONSTANTS.STATUS_OPTIONS, true)
     .setAllowInvalid(false)
+    .setHelpText('ステータスを選択してください')
     .build();
   sheet.getRange(2, 10, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule); // J列（10列目）
 
@@ -1255,10 +1273,7 @@ function updateExistingMonthlySheet(sheetName) {
   sheet.getRange(7, 12, 3, 1).setFormulas(monthlyTotalFormulas);
 
   // 条件付き書式を設定（一度に設定してパフォーマンス最適化）
-  setConditionalFormatting(sheet, 10, 4); // ステータス列（10列目）、クライアント列（4列目）
-
-  // 納期列の条件付き書式を設定（当日: 赤、明日: 黄色）
-  setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
+  setConditionalFormatting(sheet, 10, 4, 3); // ステータス列（10列目）、クライアント列（4列目）、納期列（3列目）
 
   // フォーマットを適用（既存のデータは保持）
   formatMonthlySheet(sheet);
@@ -1310,10 +1325,7 @@ function updateExistingEndOfMonthSheet(sheetName) {
   sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule); // H列（8列目）
 
   // 条件付き書式を設定（一度に設定してパフォーマンス最適化）
-  setConditionalFormatting(sheet, 8, 4); // ステータス列（8列目）、クライアント列（4列目）
-
-  // 納期列の条件付き書式を設定（当日: 赤、明日: 黄色）
-  setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
+  setConditionalFormatting(sheet, 8, 4, 3); // ステータス列（8列目）、クライアント列（4列目）、納期列（3列目）
 
   // フォーマットを適用（既存のデータは保持）
   formatEndOfMonthSheet(sheet);
