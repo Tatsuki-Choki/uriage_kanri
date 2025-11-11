@@ -306,35 +306,37 @@ function createMonthlySheet(sheetName, yearlySheetName = null) {
   }
   
   // ヘッダー行を設定
-  const headers = ['項番', 'クライアント', '業種', '経費', '経費（ドル）', '売上', '利益', 'ステータス', '備考'];
+  const headers = ['項番', '受注日', '納期', 'クライアント', '業種', '経費', '経費（ドル）', '売上', '利益', 'ステータス', '備考'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  
+
   // 65行のデータ行を作成
   const dataRows = [];
   for (let i = 1; i <= CONSTANTS.DATA_ROWS; i++) {
-    dataRows.push([i, '', '', '', '', '', '', '', '']);
+    dataRows.push([i, '', '', '', '', '', '', '', '', '', '']);
   }
-  
+
   sheet.getRange(2, 1, dataRows.length, headers.length).setValues(dataRows);
-  
+
   // 利益列の計算式を設定（売上 - 経費 - 経費（ドル換算））
   // パフォーマンス最適化：配列を生成して一括設定
   const profitFormulas = [];
   for (let i = 2; i <= CONSTANTS.DATA_ROWS + 1; i++) {
-    profitFormulas.push([`=IF(F${i}="","",F${i}-D${i}-IF(E${i}="",0,E${i}*getExchangeRate()))`]);
+    profitFormulas.push([`=IF(H${i}="","",H${i}-F${i}-IF(G${i}="",0,G${i}*getExchangeRate()))`]);
   }
-  sheet.getRange(2, 7, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
+  sheet.getRange(2, 9, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
+  sheet.getRange(2, 9, CONSTANTS.DATA_ROWS, 1).setNumberFormat('¥#,##0');
   
   // 合計行を追加（67行目）- バッチ処理で最適化
   const totalRow = CONSTANTS.TOTAL_ROW;
   sheet.getRange(totalRow, 1).setValue('合計');
   const totalFormulas = [
-    [`=SUM(D2:D${CONSTANTS.DATA_ROWS + 1})`],  // 経費（円）
-    [`=SUM(E2:E${CONSTANTS.DATA_ROWS + 1})*getExchangeRate()`],  // 経費（ドル）を円換算して合計
-    [`=SUM(F2:F${CONSTANTS.DATA_ROWS + 1})`],  // 売上
-    [`=SUM(G2:G${CONSTANTS.DATA_ROWS + 1})`]   // 利益
+    [`=SUM(F2:F${CONSTANTS.DATA_ROWS + 1})`],  // 経費（円）
+    [`=SUM(G2:G${CONSTANTS.DATA_ROWS + 1})*getExchangeRate()`],  // 経費（ドル）を円換算して合計
+    [`=SUM(H2:H${CONSTANTS.DATA_ROWS + 1})`],  // 売上
+    [`=SUM(I2:I${CONSTANTS.DATA_ROWS + 1})`]   // 利益
   ];
-  sheet.getRange(totalRow, 4, 1, 4).setFormulas([totalFormulas.map(f => f[0])]);
+  sheet.getRange(totalRow, 6, 1, 4).setFormulas([totalFormulas.map(f => f[0])]);
+  sheet.getRange(totalRow, 9).setNumberFormat('¥#,##0');
   
   // 月末請求シートの利益を参照するエリア（K列）- バッチ処理で最適化
   const endOfMonthSheetName = sheetName + '（月末請求分）';
@@ -346,12 +348,12 @@ function createMonthlySheet(sheetName, yearlySheetName = null) {
   ];
   sheet.getRange(1, 11, 4, 1).setValues(kColumnValues);
   const kColumnFormulas = [
-    [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!D${CONSTANTS.TOTAL_ROW}"),0)`],
     [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!E${CONSTANTS.TOTAL_ROW}"),0)`],
-    [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!F${CONSTANTS.TOTAL_ROW}"),0)`]
+    [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!F${CONSTANTS.TOTAL_ROW}"),0)`],
+    [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!G${CONSTANTS.TOTAL_ROW}"),0)`]
   ];
   sheet.getRange(2, 12, 3, 1).setFormulas(kColumnFormulas);
-  
+
   // 当月全体の合計（L列）- バッチ処理で最適化
   const monthlyTotalValues = [
     ['当月全体'],
@@ -362,32 +364,48 @@ function createMonthlySheet(sheetName, yearlySheetName = null) {
   sheet.getRange(6, 11, 4, 1).setValues(monthlyTotalValues);
   // 当月全体の合計数式（L列、7-9行目）: 月別シートの合計 + 月末請求分の合計
   const monthlyTotalFormulas = [
-    [`=D${CONSTANTS.TOTAL_ROW}+L2`], // 経費合計 = 月別シートの経費合計 + 月末請求分の経費合計（L列の値）
-    [`=F${CONSTANTS.TOTAL_ROW}+L3`], // 売上合計 = 月別シートの売上合計 + 月末請求分の売上合計（L列の値）
-    [`=G${CONSTANTS.TOTAL_ROW}+L4`]  // 利益合計 = 月別シートの利益合計 + 月末請求分の利益合計（L列の値）
+    [`=F${CONSTANTS.TOTAL_ROW}+L2`], // 経費合計 = 月別シートの経費合計 + 月末請求分の経費合計（L列の値）
+    [`=H${CONSTANTS.TOTAL_ROW}+L3`], // 売上合計 = 月別シートの売上合計 + 月末請求分の売上合計（L列の値）
+    [`=I${CONSTANTS.TOTAL_ROW}+L4`]  // 利益合計 = 月別シートの利益合計 + 月末請求分の利益合計（L列の値）
   ];
   sheet.getRange(7, 12, 3, 1).setFormulas(monthlyTotalFormulas);
   
-  // ステータスのデータ検証を設定
+  // 受注日列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+  const dateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(false)
+    .setShowCustomUi(true)
+    .build();
+  sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+  // 納期列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+  // ステータスのデータ検証を設定（最新のチップスタイル）
   const statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(CONSTANTS.STATUS_OPTIONS)
     .setAllowInvalid(false)
+    .setShowCustomUi(true)
     .build();
-  sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
-  
-  // クライアント列のデータ検証を設定（クライアントシートから参照）
+  sheet.getRange(2, 10, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
+
+  // クライアント列のデータ検証を設定（クライアントシートから参照、最新のチップスタイル）
   const clientSheet = ss.getSheetByName('クライアント');
   if (clientSheet) {
     const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
     const clientValidation = SpreadsheetApp.newDataValidation()
       .requireValueInRange(clientRange)
       .setAllowInvalid(false)
+      .setShowCustomUi(true)
       .build();
-    sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
+    sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
   }
-  
+
   // 条件付き書式を設定（一度に設定してパフォーマンス最適化）
-  setConditionalFormatting(sheet, 8, 2); // ステータス列（8列目）、クライアント列（2列目）
+  setConditionalFormatting(sheet, 10, 4); // ステータス列（10列目）、クライアント列（4列目）
+
+  // 納期列の条件付き書式を設定（当日: 赤、1日前: 黄色）
+  setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
   
   // フォーマットを適用
   formatMonthlySheet(sheet);
@@ -553,6 +571,307 @@ function setClientConditionalFormatting(sheet, clientColumn) {
 }
 
 /**
+ * 納期列に条件付き書式を設定（当日: 赤、1日前: 黄色）
+ * @param {Sheet} sheet シートオブジェクト
+ * @param {number} deliveryColumn 納期列の番号
+ */
+function setDeliveryDateConditionalFormatting(sheet, deliveryColumn) {
+  const rules = [];
+  const columnLetter = String.fromCharCode(64 + deliveryColumn); // A=65, B=66, ...
+
+  // 納期が当日の場合: 赤色背景
+  const todayRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(`=${columnLetter}2=TODAY()`)
+    .setBackground('#FF0000')
+    .setFontColor('#FFFFFF')
+    .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
+    .build();
+  rules.push(todayRule);
+
+  // 納期が1日前の場合: 黄色背景
+  const tomorrowRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(`=${columnLetter}2=TODAY()+1`)
+    .setBackground('#FFFF00')
+    .setRanges([sheet.getRange(2, deliveryColumn, CONSTANTS.DATA_ROWS, 1)])
+    .build();
+  rules.push(tomorrowRule);
+
+  // 既存のルールを取得して追加
+  const existingRules = sheet.getConditionalFormatRules();
+  sheet.setConditionalFormatRules(existingRules.concat(rules));
+}
+
+/**
+ * 既存の月末請求シートに納期列を追加（受注日の後に挿入）
+ * @param {string} sheetName シート名
+ */
+function addDeliveryColumnToEndOfMonthSheet(sheetName) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(sheetName);
+
+    if (!sheet) {
+      throw new Error(`シート「${sheetName}」が見つかりません`);
+    }
+
+    // 既に納期列が存在するか確認（3列目のヘッダーが「納期」かどうか）
+    const thirdColumnHeader = sheet.getRange(1, 3).getValue();
+    if (thirdColumnHeader === '納期') {
+      writeLog('INFO', 'addDeliveryColumnToEndOfMonthSheet', `シート「${sheetName}」には既に納期列が存在します`);
+      return;
+    }
+
+    // ステップ1: 既存のデータ検証と条件付き書式をすべてクリア
+    sheet.clearDataValidations();
+    sheet.clearConditionalFormatRules();
+
+    // ステップ2: C列（クライアントの位置）の前に新しい列を挿入
+    sheet.insertColumnBefore(3);
+
+    // ステップ3: ヘッダーを設定
+    sheet.getRange(1, 3).setValue('納期');
+
+    // ステップ4: 利益列の数式を更新（G列、旧数式はE-Dだったが、F-Eに更新）
+    const profitFormulas = [];
+    for (let i = 2; i <= CONSTANTS.DATA_ROWS + 1; i++) {
+      profitFormulas.push([`=IF(F${i}="","",F${i}-E${i})`]);
+    }
+    sheet.getRange(2, 7, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
+
+    // ステップ5: データ検証を新しい列番号で設定（最新のチップスタイル）
+    const dateRule = SpreadsheetApp.newDataValidation()
+      .requireDate()
+      .setAllowInvalid(false)
+      .setShowCustomUi(true)
+      .build();
+
+    // 受注日列（B列）
+    sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+    // 納期列（C列）
+    sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+    // クライアント列（D列）
+    const clientSheet = ss.getSheetByName('クライアント');
+    if (clientSheet) {
+      try {
+        const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
+        const clientValidation = SpreadsheetApp.newDataValidation()
+          .requireValueInRange(clientRange)
+          .setAllowInvalid(false)
+          .setShowCustomUi(true)
+          .build();
+        sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
+      } catch (error) {
+        writeLog('WARNING', 'addDeliveryColumnToEndOfMonthSheet', `クライアント列のデータ検証設定に失敗: ${error.toString()}`);
+      }
+    }
+
+    // ステータス列（H列）
+    const statusRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(CONSTANTS.STATUS_OPTIONS)
+      .setAllowInvalid(false)
+      .setShowCustomUi(true)
+      .build();
+    sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
+
+    // ステップ6: 条件付き書式を新しい列番号で設定
+    setConditionalFormatting(sheet, 8, 4); // ステータス列（8列目）、クライアント列（4列目）
+    setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
+
+    // ステップ7: フォーマットを適用
+    formatEndOfMonthSheet(sheet);
+
+    // ステップ8: 合計行の数式を更新
+    const totalRow = CONSTANTS.TOTAL_ROW;
+    const totalFormulas = [
+      [`=SUM(E2:E${CONSTANTS.DATA_ROWS + 1})`],
+      [`=SUM(F2:F${CONSTANTS.DATA_ROWS + 1})`],
+      [`=SUM(G2:G${CONSTANTS.DATA_ROWS + 1})`]
+    ];
+    sheet.getRange(totalRow, 5, 1, 3).setFormulas([totalFormulas.map(f => f[0])]);
+
+    // ステップ9: サマリーエリアの数式を更新
+    const summaryFormulas = [
+      [`=G${CONSTANTS.TOTAL_ROW}`],
+      [`=E${CONSTANTS.TOTAL_ROW}`],
+      [`=G${CONSTANTS.TOTAL_ROW}`]
+    ];
+    sheet.getRange(2, 11, 3, 1).setFormulas(summaryFormulas);
+
+    // ステップ10: クライアント別売上一覧の数式を更新
+    const clientListRow = 8;
+    sheet.getRange(clientListRow, 10).setFormula(`=UNIQUE(FILTER(D2:D${CONSTANTS.DATA_ROWS + 1},D2:D${CONSTANTS.DATA_ROWS + 1}<>""))`);
+
+    const clientSumFormulas = [];
+    for (let i = 0; i < 20; i++) {
+      const row = clientListRow + i;
+      clientSumFormulas.push([`=IF(J${row}="","",SUMIF(D2:D${CONSTANTS.DATA_ROWS + 1},J${row},F2:F${CONSTANTS.DATA_ROWS + 1}))`]);
+    }
+    sheet.getRange(clientListRow, 11, 20, 1).setFormulas(clientSumFormulas);
+
+    writeLog('INFO', 'addDeliveryColumnToEndOfMonthSheet', `シート「${sheetName}」に納期列を追加しました`);
+  } catch (error) {
+    writeLog('ERROR', 'addDeliveryColumnToEndOfMonthSheet', `エラー: ${error.toString()}`);
+    throw error;
+  }
+}
+
+/**
+ * 既存の月別シートに受注日と納期列を追加（項番の後に挿入）
+ * @param {string} sheetName シート名
+ */
+function addOrderAndDeliveryColumnsToMonthlySheet(sheetName) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(sheetName);
+
+    if (!sheet) {
+      throw new Error(`シート「${sheetName}」が見つかりません`);
+    }
+
+    // 既に受注日列が存在するか確認（2列目のヘッダーが「受注日」かどうか）
+    const secondColumnHeader = sheet.getRange(1, 2).getValue();
+    if (secondColumnHeader === '受注日') {
+      writeLog('INFO', 'addOrderAndDeliveryColumnsToMonthlySheet', `シート「${sheetName}」には既に受注日と納期列が存在します`);
+      return;
+    }
+
+    // ステップ1: 既存のデータ検証と条件付き書式をすべてクリア
+    sheet.clearDataValidations();
+    sheet.clearConditionalFormatRules();
+
+    // ステップ2: B列（クライアントの位置）の前に2列を挿入
+    sheet.insertColumnsBefore(2, 2);
+
+    // ステップ3: ヘッダーを設定
+    sheet.getRange(1, 2).setValue('受注日');
+    sheet.getRange(1, 3).setValue('納期');
+
+    // ステップ4: 利益列の数式を更新（I列、旧数式はF-D-IF(E...)だったが、H-F-IF(G...)に更新）
+    const profitFormulas = [];
+    for (let i = 2; i <= CONSTANTS.DATA_ROWS + 1; i++) {
+      profitFormulas.push([`=IF(H${i}="","",H${i}-F${i}-IF(G${i}="",0,G${i}*getExchangeRate()))`]);
+    }
+    sheet.getRange(2, 9, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
+
+    // ステップ5: データ検証を新しい列番号で設定（最新のチップスタイル）
+    const dateRule = SpreadsheetApp.newDataValidation()
+      .requireDate()
+      .setAllowInvalid(false)
+      .setShowCustomUi(true)
+      .build();
+
+    // 受注日列（B列）
+    sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+    // 納期列（C列）
+    sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+    // クライアント列（D列）
+    const clientSheet = ss.getSheetByName('クライアント');
+    if (clientSheet) {
+      try {
+        const clientRange = clientSheet.getRange(`A2:A${CONSTANTS.MAX_CLIENT_ROWS}`);
+        const clientValidation = SpreadsheetApp.newDataValidation()
+          .requireValueInRange(clientRange)
+          .setAllowInvalid(false)
+          .setShowCustomUi(true)
+          .build();
+        sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
+      } catch (error) {
+        writeLog('WARNING', 'addOrderAndDeliveryColumnsToMonthlySheet', `クライアント列のデータ検証設定に失敗: ${error.toString()}`);
+      }
+    }
+
+    // ステータス列（J列）
+    const statusRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(CONSTANTS.STATUS_OPTIONS)
+      .setAllowInvalid(false)
+      .setShowCustomUi(true)
+      .build();
+    sheet.getRange(2, 10, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
+
+    // ステップ6: 条件付き書式を新しい列番号で設定
+    setConditionalFormatting(sheet, 10, 4); // ステータス列（10列目）、クライアント列（4列目）
+    setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
+
+    // ステップ7: フォーマットを適用
+    formatMonthlySheet(sheet);
+
+    // ステップ8: 合計行の数式を更新
+    const totalRow = CONSTANTS.TOTAL_ROW;
+    const totalFormulas = [
+      [`=SUM(F2:F${CONSTANTS.DATA_ROWS + 1})`],  // 経費（円）
+      [`=SUM(G2:G${CONSTANTS.DATA_ROWS + 1})*getExchangeRate()`],  // 経費（ドル）を円換算して合計
+      [`=SUM(H2:H${CONSTANTS.DATA_ROWS + 1})`],  // 売上
+      [`=SUM(I2:I${CONSTANTS.DATA_ROWS + 1})`]   // 利益
+    ];
+    sheet.getRange(totalRow, 6, 1, 4).setFormulas([totalFormulas.map(f => f[0])]);
+
+    // ステップ9: 月末請求シートを参照するエリアの数式を更新
+    const endOfMonthSheetName = sheetName + '（月末請求分）';
+    const kColumnFormulas = [
+      [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!E${CONSTANTS.TOTAL_ROW}"),0)`],
+      [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!F${CONSTANTS.TOTAL_ROW}"),0)`],
+      [`=IFERROR(INDIRECT("'${endOfMonthSheetName}'!G${CONSTANTS.TOTAL_ROW}"),0)`]
+    ];
+    sheet.getRange(2, 12, 3, 1).setFormulas(kColumnFormulas);
+
+    // ステップ10: 当月全体の合計数式を更新
+    const monthlyTotalFormulas = [
+      [`=F${CONSTANTS.TOTAL_ROW}+L2`], // 経費合計
+      [`=H${CONSTANTS.TOTAL_ROW}+L3`], // 売上合計
+      [`=I${CONSTANTS.TOTAL_ROW}+L4`]  // 利益合計
+    ];
+    sheet.getRange(7, 12, 3, 1).setFormulas(monthlyTotalFormulas);
+
+    writeLog('INFO', 'addOrderAndDeliveryColumnsToMonthlySheet', `シート「${sheetName}」に受注日と納期列を追加しました`);
+  } catch (error) {
+    writeLog('ERROR', 'addOrderAndDeliveryColumnsToMonthlySheet', `エラー: ${error.toString()}`);
+    throw error;
+  }
+}
+
+/**
+ * すべての既存シートに新しい列を追加する
+ */
+function addColumnsToAllExistingSheets() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheets = ss.getSheets();
+    let updatedSheets = [];
+
+    sheets.forEach(sheet => {
+      const sheetName = sheet.getName();
+
+      // システムシート（ログ、クライアント、年度別シート）はスキップ
+      if (sheetName === 'ログ' || sheetName === 'クライアント' || sheetName.includes('年度')) {
+        return;
+      }
+
+      try {
+        if (sheetName.endsWith('（月末請求分）')) {
+          addDeliveryColumnToEndOfMonthSheet(sheetName);
+          updatedSheets.push(sheetName);
+        } else if (sheetName.includes('月')) {
+          addOrderAndDeliveryColumnsToMonthlySheet(sheetName);
+          updatedSheets.push(sheetName);
+        }
+      } catch (error) {
+        writeLog('WARNING', 'addColumnsToAllExistingSheets', `シート「${sheetName}」の更新に失敗しました: ${error.toString()}`);
+      }
+    });
+
+    SpreadsheetApp.getUi().alert(`${updatedSheets.length}個のシートを更新しました:\n${updatedSheets.join('\n')}`);
+    writeLog('INFO', 'addColumnsToAllExistingSheets', `${updatedSheets.length}個のシートを更新しました`);
+  } catch (error) {
+    writeLog('ERROR', 'addColumnsToAllExistingSheets', `エラー: ${error.toString()}`);
+    SpreadsheetApp.getUi().alert(`エラーが発生しました: ${error.toString()}`);
+  }
+}
+
+/**
  * シート名から月名を抽出（末尾の「（月末請求分）」を削除）
  * @param {string} sheetName シート名
  * @returns {string} 月名（例: "11月"）
@@ -593,32 +912,32 @@ function createEndOfMonthSheet(sheetName) {
     }
     
     // ステップ2: ヘッダー行を設定
-    const headers = ['項番', '受注日', 'クライアント', '経費', '売上', '利益', 'ステータス', '備考'];
+    const headers = ['項番', '受注日', '納期', 'クライアント', '経費', '売上', '利益', 'ステータス', '備考'];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    
+
     // ステップ3: データ行を作成（バッチ処理）
     const dataRows = [];
     for (let i = 1; i <= CONSTANTS.DATA_ROWS; i++) {
-      dataRows.push([i, '', '', '', '', '', '', '']);
+      dataRows.push([i, '', '', '', '', '', '', '', '']);
     }
     sheet.getRange(2, 1, dataRows.length, headers.length).setValues(dataRows);
-    
+
     // ステップ4: 利益列の計算式を設定（バッチ処理）
     const profitFormulas = [];
     for (let i = 2; i <= CONSTANTS.DATA_ROWS + 1; i++) {
-      profitFormulas.push([`=IF(E${i}="","",E${i}-D${i})`]);
+      profitFormulas.push([`=IF(F${i}="","",F${i}-E${i})`]);
     }
-    sheet.getRange(2, 6, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
+    sheet.getRange(2, 7, CONSTANTS.DATA_ROWS, 1).setFormulas(profitFormulas);
     
     // ステップ5: 合計行を設定
     const totalRow = CONSTANTS.TOTAL_ROW;
     sheet.getRange(totalRow, 1).setValue('合計');
     const totalFormulas = [
-      [`=SUM(D2:D${CONSTANTS.DATA_ROWS + 1})`],
       [`=SUM(E2:E${CONSTANTS.DATA_ROWS + 1})`],
-      [`=SUM(F2:F${CONSTANTS.DATA_ROWS + 1})`]
+      [`=SUM(F2:F${CONSTANTS.DATA_ROWS + 1})`],
+      [`=SUM(G2:G${CONSTANTS.DATA_ROWS + 1})`]
     ];
-    sheet.getRange(totalRow, 4, 1, 3).setFormulas([totalFormulas.map(f => f[0])]);
+    sheet.getRange(totalRow, 5, 1, 3).setFormulas([totalFormulas.map(f => f[0])]);
     
     // ステップ6: 別エリアに合計を表示（J列）
     const summaryValues = [
@@ -629,9 +948,9 @@ function createEndOfMonthSheet(sheetName) {
     ];
     sheet.getRange(1, 10, 4, 1).setValues(summaryValues);
     const summaryFormulas = [
-      [`=F${CONSTANTS.TOTAL_ROW}`],
-      [`=D${CONSTANTS.TOTAL_ROW}`],
-      [`=F${CONSTANTS.TOTAL_ROW}`]
+      [`=G${CONSTANTS.TOTAL_ROW}`],
+      [`=E${CONSTANTS.TOTAL_ROW}`],
+      [`=G${CONSTANTS.TOTAL_ROW}`]
     ];
     sheet.getRange(2, 11, 3, 1).setFormulas(summaryFormulas);
     
@@ -641,33 +960,38 @@ function createEndOfMonthSheet(sheetName) {
       ['クライアント', '売上']
     ];
     sheet.getRange(6, 10, 2, 2).setValues(clientListHeaders);
-    
+
     const clientListRow = 8;
-    sheet.getRange(clientListRow, 10).setFormula(`=UNIQUE(FILTER(C2:C${CONSTANTS.DATA_ROWS + 1},C2:C${CONSTANTS.DATA_ROWS + 1}<>""))`);
-    
+    sheet.getRange(clientListRow, 10).setFormula(`=UNIQUE(FILTER(D2:D${CONSTANTS.DATA_ROWS + 1},D2:D${CONSTANTS.DATA_ROWS + 1}<>""))`);
+
     const clientSumFormulas = [];
     for (let i = 0; i < 20; i++) {
       const row = clientListRow + i;
-      clientSumFormulas.push([`=IF(J${row}="","",SUMIF(C2:C${CONSTANTS.DATA_ROWS + 1},J${row},E2:E${CONSTANTS.DATA_ROWS + 1}))`]);
+      clientSumFormulas.push([`=IF(J${row}="","",SUMIF(D2:D${CONSTANTS.DATA_ROWS + 1},J${row},F2:F${CONSTANTS.DATA_ROWS + 1}))`]);
     }
     sheet.getRange(clientListRow, 11, 20, 1).setFormulas(clientSumFormulas);
     
     // ステップ8: データ検証を設定
-    // 受注日列のデータ検証（カレンダーから選択可能）
+    // 受注日列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
     const dateRule = SpreadsheetApp.newDataValidation()
       .requireDate()
       .setAllowInvalid(false)
+      .setShowCustomUi(true)
       .build();
     sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
-    
-    // ステータス列のデータ検証
+
+    // 納期列のデータ検証（カレンダーから選択可能、最新のチップスタイル）
+    sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(dateRule);
+
+    // ステータス列のデータ検証（最新のチップスタイル）
     const statusRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(CONSTANTS.STATUS_OPTIONS)
       .setAllowInvalid(false)
+      .setShowCustomUi(true)
       .build();
-    sheet.getRange(2, 7, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
-    
-    // クライアント列のデータ検証
+    sheet.getRange(2, 8, CONSTANTS.DATA_ROWS, 1).setDataValidation(statusRule);
+
+    // クライアント列のデータ検証（最新のチップスタイル）
     const clientSheet = ss.getSheetByName('クライアント');
     if (clientSheet) {
       try {
@@ -675,15 +999,19 @@ function createEndOfMonthSheet(sheetName) {
         const clientValidation = SpreadsheetApp.newDataValidation()
           .requireValueInRange(clientRange)
           .setAllowInvalid(false)
+          .setShowCustomUi(true)
           .build();
-        sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
+        sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setDataValidation(clientValidation);
       } catch (error) {
         writeLog('WARNING', 'createEndOfMonthSheet', `クライアント列のデータ検証設定に失敗しました: ${error.toString()}`);
       }
     }
-    
+
     // 条件付き書式を設定（一度に設定してパフォーマンス最適化）
-    setConditionalFormatting(sheet, 7, 3); // ステータス列（7列目）、クライアント列（3列目）
+    setConditionalFormatting(sheet, 8, 4); // ステータス列（8列目）、クライアント列（4列目）
+
+    // 納期列の条件付き書式を設定（当日: 赤、1日前: 黄色）
+    setDeliveryDateConditionalFormatting(sheet, 3); // 納期列（3列目）
     
     // ステップ9: フォーマットを適用（最後に実行）
     formatEndOfMonthSheet(sheet);
@@ -756,8 +1084,8 @@ function formatYearlySheet(sheet) {
 function formatMonthlySheet(sheet) {
   // ヘッダー行のフォーマット（月別シート統一色：緑）- パフォーマンス最適化
   const headerColor = '#34A853'; // 緑
-  
-  const headerRange = sheet.getRange(1, 1, 1, 9);
+
+  const headerRange = sheet.getRange(1, 1, 1, 11);
   // 複数のプロパティを一度に設定（API呼び出しを最小化）
   headerRange.setBackground(headerColor);
   headerRange.setFontColor('#ffffff');
@@ -766,27 +1094,31 @@ function formatMonthlySheet(sheet) {
   headerRange.setHorizontalAlignment('center');
   headerRange.setVerticalAlignment('middle');
   headerRange.setBorder(true, true, true, true, false, false);
-  
+
   // データ行のフォーマット - バッチ処理
-  const dataRange = sheet.getRange(2, 1, CONSTANTS.DATA_ROWS, 9);
+  const dataRange = sheet.getRange(2, 1, CONSTANTS.DATA_ROWS, 11);
   dataRange.setBorder(true, true, true, true, false, false);
-  
+
   // 交互の行に背景色を設定（バッチ処理で最適化）
-  const evenRowRange = sheet.getRange(2, 1, 33, 9);
-  const oddRowRange = sheet.getRange(3, 1, 32, 9);
+  const evenRowRange = sheet.getRange(2, 1, 33, 11);
+  const oddRowRange = sheet.getRange(3, 1, 32, 11);
   evenRowRange.setBackground('#f7f9fa');
   oddRowRange.setBackground('#ffffff');
-  
+
+  // 日付列のフォーマット
+  sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setNumberFormat('mm/dd'); // 受注日（月日のみ表示）
+  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setNumberFormat('mm/dd'); // 納期（月日のみ表示）
+
   // 数値列のフォーマット（バッチ処理で最適化）
-  const numberFormatRange = sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 4);
+  const numberFormatRange = sheet.getRange(2, 6, CONSTANTS.DATA_ROWS, 4);
   const numberFormats = [];
   for (let i = 0; i < CONSTANTS.DATA_ROWS; i++) {
     numberFormats.push(['¥#,##0', '$#,##0.00', '¥#,##0', '¥#,##0']); // 経費、経費（ドル）、売上、利益
   }
   numberFormatRange.setNumberFormats(numberFormats);
-  
+
   // 合計行の数値フォーマット
-  sheet.getRange(CONSTANTS.TOTAL_ROW, 4, 1, 4).setNumberFormat('¥#,##0');
+  sheet.getRange(CONSTANTS.TOTAL_ROW, 6, 1, 4).setNumberFormat('¥#,##0');
   
   // 月末請求分のエリアのフォーマット（モダンなスタイル）- パフォーマンス最適化
   // 範囲をまとめて処理（API呼び出しを最小化）
@@ -809,7 +1141,7 @@ function formatMonthlySheet(sheet) {
   
   // 列幅の調整 - パフォーマンス最適化（必要な列のみ設定）
   // 0以外の列幅のみを設定（API呼び出しを最小化）
-  const columnWidths = [40, 150, 100, 100, 120, 100, 100, 120, 800, 0, 120, 120];
+  const columnWidths = [40, 70, 70, 150, 100, 100, 120, 100, 100, 120, 800, 0, 120, 120];
   for (let i = 0; i < columnWidths.length; i++) {
     if (columnWidths[i] > 0) {
       sheet.setColumnWidth(i + 1, columnWidths[i]);
@@ -823,8 +1155,8 @@ function formatMonthlySheet(sheet) {
 function formatEndOfMonthSheet(sheet) {
   // ヘッダー行のフォーマット（月末請求シート統一色：オレンジ）- パフォーマンス最適化
   const headerColor = '#FF9800'; // オレンジ
-  
-  const headerRange = sheet.getRange(1, 1, 1, 8);
+
+  const headerRange = sheet.getRange(1, 1, 1, 9);
   // 複数のプロパティを一度に設定（API呼び出しを最小化）
   headerRange.setBackground(headerColor);
   headerRange.setFontColor('#ffffff');
@@ -833,30 +1165,31 @@ function formatEndOfMonthSheet(sheet) {
   headerRange.setHorizontalAlignment('center');
   headerRange.setVerticalAlignment('middle');
   headerRange.setBorder(true, true, true, true, false, false);
-  
+
   // データ行のフォーマット - バッチ処理
-  const dataRange = sheet.getRange(2, 1, CONSTANTS.DATA_ROWS, 8);
+  const dataRange = sheet.getRange(2, 1, CONSTANTS.DATA_ROWS, 9);
   dataRange.setBorder(true, true, true, true, false, false);
-  
+
   // 交互の行に背景色を設定（バッチ処理で最適化）
-  const evenRowRange = sheet.getRange(2, 1, 33, 8);
-  const oddRowRange = sheet.getRange(3, 1, 32, 8);
+  const evenRowRange = sheet.getRange(2, 1, 33, 9);
+  const oddRowRange = sheet.getRange(3, 1, 32, 9);
   evenRowRange.setBackground('#f7f9fa');
   oddRowRange.setBackground('#ffffff');
-  
+
   // 数値列のフォーマット（バッチ処理）- 利益列は数式のため除外
   sheet.getRange(2, 2, CONSTANTS.DATA_ROWS, 1).setNumberFormat('mm/dd'); // 受注日（月日のみ表示）
-  sheet.getRange(2, 4, CONSTANTS.DATA_ROWS, 1).setNumberFormat('¥#,##0'); // 経費
-  sheet.getRange(2, 5, CONSTANTS.DATA_ROWS, 1).setNumberFormat('¥#,##0'); // 売上
-  // 利益列（F列）は数式のため数値形式の設定をスキップ
-  
+  sheet.getRange(2, 3, CONSTANTS.DATA_ROWS, 1).setNumberFormat('mm/dd'); // 納期（月日のみ表示）
+  sheet.getRange(2, 5, CONSTANTS.DATA_ROWS, 1).setNumberFormat('¥#,##0'); // 経費
+  sheet.getRange(2, 6, CONSTANTS.DATA_ROWS, 1).setNumberFormat('¥#,##0'); // 売上
+  // 利益列（G列）は数式のため数値形式の設定をスキップ
+
   // 合計行のフォーマット（バッチ処理）
-  const totalRange = sheet.getRange(CONSTANTS.TOTAL_ROW, 1, 1, 8);
+  const totalRange = sheet.getRange(CONSTANTS.TOTAL_ROW, 1, 1, 9);
   totalRange.setBackground('#e8f5e9');
   totalRange.setFontWeight('bold');
   totalRange.setFontSize(11);
   totalRange.setBorder(true, true, true, true, false, false);
-  sheet.getRange(CONSTANTS.TOTAL_ROW, 4, 1, 3).setNumberFormat('¥#,##0');
+  sheet.getRange(CONSTANTS.TOTAL_ROW, 5, 1, 3).setNumberFormat('¥#,##0');
   
   // 別エリアのフォーマット（モダンなスタイル）- パフォーマンス最適化
   // 範囲をまとめて処理（API呼び出しを最小化）
@@ -884,7 +1217,7 @@ function formatEndOfMonthSheet(sheet) {
   sheet.getRange(8, 11, 100, 1).setNumberFormat('¥#,##0');
   
   // 列幅の調整 - パフォーマンス最適化（必要な列のみ設定）
-  const columnWidths = [40, 70, 150, 100, 100, 100, 120, 800, 0, 150, 120];
+  const columnWidths = [40, 70, 70, 150, 100, 100, 100, 120, 800, 0, 150, 120];
   for (let i = 0; i < columnWidths.length; i++) {
     if (columnWidths[i] > 0) {
       sheet.setColumnWidth(i + 1, columnWidths[i]);
@@ -1146,6 +1479,8 @@ function updateExistingMonthlySheet(sheetName) {
     [`=SUM(G2:G${CONSTANTS.DATA_ROWS + 1})`]   // 利益
   ];
   sheet.getRange(totalRow, 4, 1, 4).setFormulas([totalFormulas.map(f => f[0])]);
+  sheet.getRange(2, 7, CONSTANTS.DATA_ROWS, 1).setNumberFormat('¥#,##0');
+  sheet.getRange(totalRow, 7).setNumberFormat('¥#,##0');
   
   // 月末請求シートの利益を参照するエリア（K列、L列）を更新
   const endOfMonthSheetName = sheetName + '（月末請求分）';
@@ -1950,23 +2285,23 @@ function registerToMonthlySheet(ss, month, data, registrationDate) {
     // 空いている行を探す（2行目から67行目まで）
     let targetRow = null;
     for (let row = 2; row <= CONSTANTS.TOTAL_ROW; row++) {
-      const clientValue = sheet.getRange(row, 2).getValue(); // B列（クライアント）
+      const clientValue = sheet.getRange(row, 4).getValue(); // D列（クライアント）
       if (!clientValue || clientValue.toString().trim() === '') {
         targetRow = row;
         break;
       }
     }
-    
+
     if (!targetRow) {
       return createCorsResponse({
         success: false,
         error: '登録可能な空き行がありません'
       });
     }
-    
+
     // 項番を設定（行番号 - 1）
     const itemNumber = targetRow - 1;
-    
+
     // データを準備
     const clientName = data.clientName.toString().trim();
     const industry = data.industry ? data.industry.toString().trim() : '';
@@ -1974,7 +2309,15 @@ function registerToMonthlySheet(ss, month, data, registrationDate) {
     const expenseUsd = data.expenseUsd ? parseFloat(data.expenseUsd) : '';
     const revenue = parseFloat(data.revenue);
     const status = data.status.toString().trim();
-    
+
+    // 受注日（orderDateが指定されている場合はそれを使用、なければregistrationDateを使用）
+    const orderDateStr = data.orderDate || registrationDate;
+    const orderDateObj = new Date(orderDateStr);
+
+    // 納期
+    const deliveryDateStr = data.deliveryDate || '';
+    const deliveryDateObj = deliveryDateStr ? new Date(deliveryDateStr) : '';
+
     // 備考に登録日を追加（登録日: YYYY-MM-DD の形式で先頭に追加）
     let notes = data.notes.toString().trim();
     if (notes) {
@@ -1982,17 +2325,19 @@ function registerToMonthlySheet(ss, month, data, registrationDate) {
     } else {
       notes = `登録日: ${registrationDate}`;
     }
-    
+
     // データを書き込み
     sheet.getRange(targetRow, 1).setValue(itemNumber); // 項番
-    sheet.getRange(targetRow, 2).setValue(clientName); // クライアント
-    sheet.getRange(targetRow, 3).setValue(industry); // 業種
-    sheet.getRange(targetRow, 4).setValue(expense || ''); // 経費
-    sheet.getRange(targetRow, 5).setValue(expenseUsd || ''); // 経費（ドル）
-    sheet.getRange(targetRow, 6).setValue(revenue); // 売上
-    // 利益（G列）は計算式で自動計算されるため設定不要
-    sheet.getRange(targetRow, 8).setValue(status); // ステータス
-    sheet.getRange(targetRow, 9).setValue(notes); // 備考
+    sheet.getRange(targetRow, 2).setValue(orderDateObj); // 受注日
+    sheet.getRange(targetRow, 3).setValue(deliveryDateObj); // 納期
+    sheet.getRange(targetRow, 4).setValue(clientName); // クライアント
+    sheet.getRange(targetRow, 5).setValue(industry); // 業種
+    sheet.getRange(targetRow, 6).setValue(expense || ''); // 経費
+    sheet.getRange(targetRow, 7).setValue(expenseUsd || ''); // 経費（ドル）
+    sheet.getRange(targetRow, 8).setValue(revenue); // 売上
+    // 利益（I列）は計算式で自動計算されるため設定不要
+    sheet.getRange(targetRow, 10).setValue(status); // ステータス
+    sheet.getRange(targetRow, 11).setValue(notes); // 備考
     
     writeLog('INFO', 'registerToMonthlySheet', `月別シート「${month}」に案件を登録しました（行${targetRow}）`);
     
@@ -2033,35 +2378,43 @@ function registerToEndOfMonthSheet(ss, month, data, registrationDate) {
     // 空いている行を探す（2行目から67行目まで）
     let targetRow = null;
     for (let row = 2; row <= CONSTANTS.TOTAL_ROW; row++) {
-      const clientValue = sheet.getRange(row, 3).getValue(); // C列（クライアント）
+      const clientValue = sheet.getRange(row, 4).getValue(); // D列（クライアント）
       if (!clientValue || clientValue.toString().trim() === '') {
         targetRow = row;
         break;
       }
     }
-    
+
     if (!targetRow) {
       return createCorsResponse({
         success: false,
         error: '登録可能な空き行がありません'
       });
     }
-    
+
     // 項番を設定（行番号 - 1）
     const itemNumber = targetRow - 1;
-    
+
     // データを準備
     const clientName = data.clientName.toString().trim();
     const expense = data.expense ? parseFloat(data.expense) : '';
     const revenue = parseFloat(data.revenue);
     const status = data.status.toString().trim();
-    
+
     // 受注日（登録日を使用。orderDateが指定されている場合はそれを使用）
     let orderDate = data.orderDate || registrationDate;
     // 日付形式を変換（YYYY-MM-DD形式からDateオブジェクトへ）
     const dateParts = orderDate.split('-');
     const orderDateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-    
+
+    // 納期
+    const deliveryDateStr = data.deliveryDate || '';
+    let deliveryDateObj = '';
+    if (deliveryDateStr) {
+      const deliveryParts = deliveryDateStr.split('-');
+      deliveryDateObj = new Date(parseInt(deliveryParts[0]), parseInt(deliveryParts[1]) - 1, parseInt(deliveryParts[2]));
+    }
+
     // 備考に登録日を追加（登録日が受注日と異なる場合のみ）
     let notes = data.notes.toString().trim();
     if (data.orderDate && data.orderDate !== registrationDate) {
@@ -2071,16 +2424,17 @@ function registerToEndOfMonthSheet(ss, month, data, registrationDate) {
         notes = `登録日: ${registrationDate}`;
       }
     }
-    
+
     // データを書き込み
     sheet.getRange(targetRow, 1).setValue(itemNumber); // 項番
     sheet.getRange(targetRow, 2).setValue(orderDateObj); // 受注日
-    sheet.getRange(targetRow, 3).setValue(clientName); // クライアント
-    sheet.getRange(targetRow, 4).setValue(expense || ''); // 経費
-    sheet.getRange(targetRow, 5).setValue(revenue); // 売上
-    // 利益（F列）は計算式で自動計算されるため設定不要
-    sheet.getRange(targetRow, 7).setValue(status); // ステータス
-    sheet.getRange(targetRow, 8).setValue(notes); // 備考
+    sheet.getRange(targetRow, 3).setValue(deliveryDateObj); // 納期
+    sheet.getRange(targetRow, 4).setValue(clientName); // クライアント
+    sheet.getRange(targetRow, 5).setValue(expense || ''); // 経費
+    sheet.getRange(targetRow, 6).setValue(revenue); // 売上
+    // 利益（G列）は計算式で自動計算されるため設定不要
+    sheet.getRange(targetRow, 8).setValue(status); // ステータス
+    sheet.getRange(targetRow, 9).setValue(notes); // 備考
     
     writeLog('INFO', 'registerToEndOfMonthSheet', `月末請求シート「${endOfMonthSheetName}」に案件を登録しました（行${targetRow}）`);
     

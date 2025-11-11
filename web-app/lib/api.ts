@@ -18,6 +18,7 @@ export interface CaseData {
   expenseUsd?: number;
   revenue: number;
   orderDate?: string;
+  deliveryDate?: string;
   status: string;
   notes: string;
 }

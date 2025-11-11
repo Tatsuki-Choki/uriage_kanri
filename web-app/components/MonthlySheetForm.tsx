@@ -57,6 +57,34 @@ export default function MonthlySheetForm({
         <p className="mt-1 text-sm text-gray-500">未入力の場合は当日が設定されます</p>
       </div>
 
+      {/* 受注日 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          受注日
+        </label>
+        <input
+          type="date"
+          value={formData.orderDate || formData.registrationDate}
+          onChange={(e) => onChange('orderDate', e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <p className="mt-1 text-sm text-gray-500">未入力の場合は登録日が設定されます</p>
+      </div>
+
+      {/* 納期 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          納期
+        </label>
+        <input
+          type="date"
+          value={formData.deliveryDate || ''}
+          onChange={(e) => onChange('deliveryDate', e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <p className="mt-1 text-sm text-gray-500">納期を入力してください（任意）</p>
+      </div>
+
       {/* クライアント名 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
